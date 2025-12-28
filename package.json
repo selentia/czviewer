@@ -1,0 +1,30 @@
+{
+  "name": "cz-multiviewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-view tool for watching multiple CHZZK streams at once.",
+  "scripts": {
+    "build": "tsup"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.32",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/selentia/czviewer.git"
+  },
+  "keywords": [
+    "chzzk",
+    "chrome-extension",
+    "multiview",
+    "streaming"
+  ],
+  "author": "selentia",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/selentia/czviewer/issues"
+  },
+  "homepage": "https://github.com/selentia/czviewer#readme"
+}

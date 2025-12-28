@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CZ MultiViewer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="head">
+        <h1>
+          <img src="../icon-32.png" class="logo" alt="" />
+          CZ MultiViewer
+        </h1>
+        <p>채널 ID 또는 라이브/채널 URL을 줄바꿈으로 입력하세요.</p>
+      </header>
+
+      <textarea
+        id="input"
+        rows="10"
+        placeholder="예)
+https://chzzk.naver.com/live/0123456789abcdef0123456789abcdef
+https://chzzk.naver.com/0123456789abcdef0123456789abcdef
+0123456789abcdef0123456789abcdef"
+      ></textarea>
+
+      <div class="meta">
+        <div class="count" id="count">인식된 채널: 0</div>
+        <div class="errors" id="errors" aria-live="polite"></div>
+      </div>
+
+      <div class="chips" id="chips" aria-label="채널 미리보기"></div>
+
+      <div class="actions">
+        <button id="open" class="btn primary">멀티뷰 열기</button>
+        <div class="actions-sub">
+          <button id="grab" class="btn ghost" type="button">현재 탭 추가</button>
+          <button id="clear" class="btn ghost" type="button">초기화</button>
+        </div>
+      </div>
+
+      <footer class="foot">
+        <span class="hint">팁: 중복 입력은 자동 제거돼요.</span>
+      </footer>
+      <div class="footer-links">
+        <a href="https://github.com/selentia/czviewer" target="_blank" aria-label="GitHub">
+          <img src="/github_icon.png" class="footer-icon" alt="" />
+        </a>
+        <a href="https://x.com/selentia01" target="_blank" aria-label="X">
+          <img src="/x_icon.png" class="footer-icon" alt="" />
+        </a>
+      </div>
+    </main>
+
+    <script src="../shared/messages.js"></script>
+    <script src="../shared/channelId.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

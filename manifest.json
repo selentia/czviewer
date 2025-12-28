@@ -1,0 +1,94 @@
+{
+  "manifest_version": 3,
+  "name": "CZ MultiViewer",
+  "version": "1.0.0",
+  "description": "여러 치지직(CHZZK) 방송을 한 화면에서 동시에 시청할 수 있는 멀티뷰 도구",
+
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png",
+    "256": "icon-256.png",
+    "512": "icon-512.png"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "CZ MultiViewer"
+  },
+
+  "permissions": [
+    "tabs",
+    "scripting",
+    "cookies",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+
+  "host_permissions": [
+    "https://api.chzzk.naver.com/*",
+    "https://chzzk.naver.com/*",
+    "https://*.naver.com/*",
+    "https://czviewer.duna.me/*",
+    "https://www.czviewer.duna.me/*",
+    "http://localhost:8787/*"
+  ],
+
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+
+  "background": {
+    "service_worker": "background/background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chzzk.naver.com/live/*",
+        "https://m.chzzk.naver.com/live/*"
+      ],
+      "js": [
+        "shared/messages.js",
+        "shared/channelId.js",
+        "content/liveContent.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://czviewer.duna.me/multiview*",
+        "https://www.czviewer.duna.me/multiview*",
+        "http://localhost:8787/multiview*"
+      ],
+      "js": [
+        "content/multiviewBridge.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "background/injectedMain.js",
+        "multiview/multiview.html",
+        "multiview/multiview.css",
+        "popup/popup.html",
+        "popup/popup.css",
+        "permission/permission.html",
+        "permission/permission.css"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
