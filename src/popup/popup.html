@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
@@ -27,6 +27,7 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
 
       <div class="meta">
         <div class="count" id="count">인식된 채널: 0</div>
+        <div class="hint-note">중복 입력은 자동으로 제거돼요.</div>
         <div class="errors" id="errors" aria-live="polite"></div>
       </div>
 
@@ -40,9 +41,57 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
         </div>
       </div>
 
-      <footer class="foot">
-        <span class="hint">팁: 중복 입력은 자동 제거돼요.</span>
-      </footer>
+      <section class="options is-collapsed" id="optionsSection">
+        <button id="optionsToggle" class="options-toggle" type="button" aria-expanded="false">
+          <span class="options-toggle-icon" aria-hidden="true">▶</span>
+          <span class="options-toggle-text">설정</span>
+        </button>
+        <div class="settings">
+          <div class="settings-group">
+            <div class="setting-row">
+              <label class="setting-label" for="headerDefaultToggle">상단 바 숨기기 (전체)</label>
+              <input id="headerDefaultToggle" type="checkbox" />
+            </div>
+            <div class="setting-row">
+              <span class="setting-label">채팅창 위치</span>
+              <div class="segmented" role="group" aria-label="채팅창 위치">
+                <input type="radio" name="chatPosition" id="chatPositionLeft" value="left" />
+                <label class="segmented-btn" for="chatPositionLeft">왼쪽</label>
+                <input type="radio" name="chatPosition" id="chatPositionRight" value="right" checked />
+                <label class="segmented-btn" for="chatPositionRight">오른쪽</label>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="setting-box">
+              <div class="setting-row setting-row-plain">
+                <label class="setting-label" for="autoFfToggle">딜레이 초과 시 자동 동기화</label>
+                <input id="autoFfToggle" type="checkbox" />
+              </div>
+              <div class="setting-row setting-row-plain setting-row-stack">
+                <label class="setting-label" for="autoFfThreshold">기준 지연 시간(초)</label>
+                <div class="threshold-controls">
+                  <input
+                    id="autoFfThreshold"
+                    class="threshold-input"
+                    type="number"
+                    min="5"
+                    max="30"
+                    step="1"
+                    inputmode="numeric"
+                  />
+                  <div class="preset-group" role="group" aria-label="기준 지연 시간 프리셋">
+                    <button type="button" class="preset-btn auto-ff-preset" data-value="8">8</button>
+                    <button type="button" class="preset-btn auto-ff-preset" data-value="12">12</button>
+                    <button type="button" class="preset-btn auto-ff-preset" data-value="20">20</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="setting-note">설정은 새로 연 멀티뷰부터 적용됩니다.</div>
+        </div>
+      </section>
       <div class="footer-links">
         <a href="https://github.com/selentia/czviewer" target="_blank" aria-label="GitHub">
           <img src="/github_icon.png" class="footer-icon" alt="" />

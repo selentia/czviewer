@@ -13,7 +13,13 @@ body {
   margin: 0;
   background: #0b0c10;
   color: #eaeef7;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    'Noto Sans KR',
+    sans-serif;
   width: 360px;
 }
 
@@ -78,27 +84,37 @@ textarea:focus {
   gap: 6px;
 }
 
+/*channels */
 .count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cfd8ef;
+}
+
+/** hints (duplicates / settings) */
+.hint-note {
   font-size: 12px;
-  color: #a9b2c3;
+  color: #8f9bb2;
+  line-height: 1.35;
 }
 
 .errors {
-  font-size: 11px;
+  font-size: 12px;
   color: #ffb4b4;
-  min-height: 14px;
+  line-height: 1.35;
+  min-height: 16px;
 }
 
 /* ==============================
  * Chips
  * ============================== */
 .chips {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 6px;
-  max-height: 92px;
+  max-height: 140px;
   overflow: auto;
   padding: 2px;
+  justify-items: start;
 }
 
 .chip {
@@ -106,7 +122,7 @@ textarea:focus {
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -121,7 +137,7 @@ textarea:focus {
 }
 
 .chip code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.75);
 }
@@ -138,6 +154,33 @@ textarea:focus {
 
 .chip-remove:hover {
   color: rgba(255, 255, 255, 1);
+}
+
+.chip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chip-move {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  border-radius: 6px;
+}
+
+.chip-move:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.chip-move:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* ==============================
@@ -182,16 +225,210 @@ textarea:focus {
 }
 
 /* ==============================
- * Footer
+ * Options
  * ============================== */
-.foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.options {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 8px;
+  opacity: 0.96;
 }
 
-.hint {
-  font-size: 11px;
+.options-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: #b9c3da;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.options-toggle:hover {
+  color: #e0e6f7;
+}
+
+.options-toggle-icon {
+  opacity: 0.75;
+  transition: transform 0.15s ease;
+}
+
+.options-toggle[aria-expanded='true'] .options-toggle-icon {
+  transform: rotate(90deg);
+}
+
+.options.is-collapsed .settings {
+  display: none;
+}
+
+/* overall */
+.settings {
+  display: grid;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.settings-group {
+  display: grid;
+  gap: 8px;
+}
+
+.setting-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.setting-row.setting-row-plain {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  min-height: auto;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 13px;
+}
+
+.setting-row-stack {
+  align-items: flex-start;
+}
+
+.setting-label {
+  color: #d6def2;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.setting-row-stack .setting-label {
+  color: #cfd8ef;
+}
+
+/* checkbox */
+.setting-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: rgba(120, 160, 255, 0.95);
+}
+
+/* auto FF threshold area */
+.threshold-controls {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.threshold-input {
+  width: 72px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  color: #eaeef7;
+  font-size: 12px;
+  outline: none;
+}
+
+.threshold-input:focus {
+  border-color: rgba(120, 160, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(120, 160, 255, 0.15);
+}
+
+.threshold-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preset-group {
+  display: flex;
+  gap: 6px;
+}
+
+.preset-btn {
+  min-width: 40px;
+  height: 26px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eaeef7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preset-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.preset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* chat place (left/right) */
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: rgba(120, 160, 255, 0.06);
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.segmented-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+}
+
+.segmented input + .segmented-btn {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.segmented .segmented-btn:first-of-type {
+  border-left: 0;
+}
+
+.segmented input:checked + .segmented-btn {
+  color: #0b0c10;
+  background: linear-gradient(135deg, rgba(120, 160, 255, 0.95), rgba(180, 120, 255, 0.95));
+}
+
+.segmented input:focus + .segmented-btn {
+  box-shadow: inset 0 0 0 1px rgba(180, 120, 255, 0.6);
+}
+
+.setting-note {
+  font-size: 12px;
   color: #8f9bb2;
 }
 
