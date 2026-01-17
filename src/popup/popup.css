@@ -84,14 +84,14 @@ textarea:focus {
   gap: 6px;
 }
 
-/*channels */
+/* Channel Count */
 .count {
   font-size: 13px;
   font-weight: 600;
   color: #cfd8ef;
 }
 
-/** hints (duplicates / settings) */
+/* Hint Note (Duplicates) */
 .hint-note {
   font-size: 12px;
   color: #8f9bb2;
@@ -266,7 +266,7 @@ textarea:focus {
   display: none;
 }
 
-/* overall */
+/* Settings */
 .settings {
   display: grid;
   gap: 16px;
@@ -321,14 +321,14 @@ textarea:focus {
   color: #cfd8ef;
 }
 
-/* checkbox */
+/* Checkbox */
 .setting-row input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: rgba(120, 160, 255, 0.95);
 }
 
-/* auto FF threshold area */
+/* Auto FF Threshold */
 .threshold-controls {
   display: grid;
   gap: 6px;
@@ -382,7 +382,7 @@ textarea:focus {
   cursor: not-allowed;
 }
 
-/* chat place (left/right) */
+/* Chat Position (Left/Right) */
 .segmented {
   display: inline-flex;
   align-items: center;
