@@ -41,6 +41,18 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
         </div>
       </div>
 
+      <section class="options is-collapsed" id="favoritesSection">
+        <button id="favoritesToggle" class="options-toggle" type="button" aria-expanded="false">
+          <span class="options-toggle-icon" aria-hidden="true">&#x25B6;</span>
+          <span class="options-toggle-text">&#xC990;&#xACA8;&#xCC3E;&#xAE30;</span>
+        </button>
+        <div class="settings">
+          <div id="favoritesEmpty" class="setting-note">&#xC990;&#xACA8;&#xCC3E;&#xAE30; &#xC5C6;&#xC74C;</div>
+          <div id="favoritesList" class="favorites-list" role="list"></div>
+          <div id="favoritesNotice" class="errors favorites-notice"></div>
+        </div>
+      </section>
+
       <section class="options is-collapsed" id="optionsSection">
         <button id="optionsToggle" class="options-toggle" type="button" aria-expanded="false">
           <span class="options-toggle-icon" aria-hidden="true">▶</span>
@@ -60,6 +72,10 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
                 <input type="radio" name="chatPosition" id="chatPositionRight" value="right" checked />
                 <label class="segmented-btn" for="chatPositionRight">오른쪽</label>
               </div>
+            </div>
+            <div class="setting-row">
+              <label class="setting-label" for="showChatTimestampToggle">채팅 타임스탬프 표시</label>
+              <input id="showChatTimestampToggle" type="checkbox" />
             </div>
           </div>
           <div class="settings-group">

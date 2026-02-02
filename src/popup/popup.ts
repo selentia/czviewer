@@ -43,6 +43,8 @@
   const STORAGE_KEY_CHAT_POSITION = 'cmv-chat-position';
   const STORAGE_KEY_AUTO_FF = 'cmv-auto-ff';
   const STORAGE_KEY_AUTO_FF_THRESHOLD = 'cmv-auto-ff-threshold';
+  const STORAGE_KEY_SHOW_CHAT_TIMESTAMP = 'czmv:showChatTimestamp';
+  const STORAGE_KEY_FAVORITES = 'czmv:favorites';
   const HEADER_DEFAULT_ON = 'on';
   const HEADER_DEFAULT_OFF = 'off';
   const CHAT_POSITION_RIGHT = 'right';
@@ -52,6 +54,9 @@
   const AUTO_FF_THRESHOLD_DEFAULT = 12;
   const AUTO_FF_THRESHOLD_MIN = 5;
   const AUTO_FF_THRESHOLD_MAX = 30;
+  const DEFAULT_SHOW_CHAT_TIMESTAMP = false;
+  const FAVORITE_ICON_ON = '♥';
+  const FAVORITE_ICON_OFF = '♡';
 
   // ---------------------------------------------------------------------------
   // DOM helpers
@@ -73,6 +78,12 @@
   type ChannelItem = {
     id: string;
     label: string;
+  };
+
+  type FavoriteChannel = {
+    channelId: string;
+    name?: string;
+    addedAt: number;
   };
 
   let recognizedChannels: ChannelItem[] = [];
@@ -253,7 +264,7 @@
       const moveUpBtn = document.createElement('button');
       moveUpBtn.type = 'button';
       moveUpBtn.className = 'chip-move chip-move-up';
-      moveUpBtn.textContent = '\u2191';
+      moveUpBtn.textContent = '↑';
       moveUpBtn.title = '위로 이동';
       moveUpBtn.setAttribute('aria-label', 'Move up');
       moveUpBtn.disabled = index === 0;
@@ -262,11 +273,43 @@
       const moveDownBtn = document.createElement('button');
       moveDownBtn.type = 'button';
       moveDownBtn.className = 'chip-move chip-move-down';
-      moveDownBtn.textContent = '\u2193';
+      moveDownBtn.textContent = '↓';
       moveDownBtn.title = '아래로 이동';
       moveDownBtn.setAttribute('aria-label', 'Move down');
       moveDownBtn.disabled = index === total - 1;
       moveDownBtn.addEventListener('click', () => swapRecognized(index, 1));
+
+      const favoriteBtn = document.createElement('button');
+      favoriteBtn.type = 'button';
+      favoriteBtn.className = 'chip-fav';
+      favoriteBtn.draggable = false;
+
+      const syncFavoriteBtn = () => {
+        const active = isFavorite(id);
+        favoriteBtn.textContent = active ? FAVORITE_ICON_ON : FAVORITE_ICON_OFF;
+        favoriteBtn.classList.toggle('is-active', active);
+        favoriteBtn.title = active ? '즐겨찾기 삭제' : '즐겨찾기 추가';
+      };
+
+      syncFavoriteBtn();
+
+      favoriteBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (isFavorite(id)) {
+          removeFavorite(id);
+        } else {
+          addFavorite({
+            channelId: id,
+            name: item.label && item.label !== id ? item.label : undefined,
+            addedAt: Date.now(),
+          });
+        }
+
+        syncFavoriteBtn();
+        renderFavoritesList();
+      });
 
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
@@ -281,6 +324,7 @@
       actions.className = 'chip-actions';
       actions.appendChild(moveUpBtn);
       actions.appendChild(moveDownBtn);
+      actions.appendChild(favoriteBtn);
       actions.appendChild(removeBtn);
 
       chip.appendChild(label);
@@ -310,6 +354,66 @@
     }
   }
 
+  function renderFavoritesList(): void {
+    const listEl = $('favoritesList') as HTMLElement | null;
+    const emptyEl = $('favoritesEmpty') as HTMLElement | null;
+    const noticeEl = $('favoritesNotice') as HTMLElement | null;
+    if (!listEl) return;
+
+    const setNotice = (message: string): void => {
+      if (noticeEl) noticeEl.textContent = message;
+    };
+
+    const favorites = loadFavorites();
+    listEl.textContent = '';
+    setNotice('');
+
+    if (emptyEl) {
+      emptyEl.style.display = favorites.length ? 'none' : 'block';
+    }
+
+    favorites.forEach((fav) => {
+      const item = document.createElement('div');
+      item.className = 'favorite-item';
+
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'favorite-add';
+      addBtn.textContent = formatFavoriteLabel(fav.channelId, fav.name);
+      addBtn.title = fav.name ? `${fav.name} (${fav.channelId})` : fav.channelId;
+      addBtn.addEventListener('click', () => {
+        const resolvedId = extractChannelId(fav.channelId);
+        if (resolvedId && recognizedChannels.some((item) => item.id === resolvedId)) {
+          setNotice(`이미 추가됨: ${fav.name}`);
+          return;
+        }
+
+        setNotice('');
+        appendLine(fav.channelId);
+        saveNow();
+        updateFromInputValue(getInput().value);
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'favorite-remove';
+      removeBtn.title = '즐겨찾기 삭제';
+      removeBtn.textContent = '❌';
+      removeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        removeFavorite(fav.channelId);
+        setNotice('');
+        renderFavoritesList();
+        renderPreview();
+      });
+
+      item.appendChild(addBtn);
+      item.appendChild(removeBtn);
+      listEl.appendChild(item);
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // URL helpers
   // ---------------------------------------------------------------------------
@@ -319,6 +423,7 @@
     headerDefault: 'on' | 'off';
     autoFfEnabled: boolean;
     autoFfThreshold: number;
+    showChatTimestamp: boolean;
   };
 
   function buildUrl(ids: string[], base: string, settings: OpenSettings): string {
@@ -328,6 +433,7 @@
     params.set('header', settings.headerDefault);
     params.set('autoFF', settings.autoFfEnabled ? '1' : '0');
     params.set('autoFFThreshold', String(settings.autoFfThreshold));
+    if (settings.showChatTimestamp) params.set('ts', '1');
     return `${base}/multiview?${params.toString()}`;
   }
 
@@ -395,6 +501,132 @@
     localStorage.setItem(STORAGE_KEY_AUTO_FF_THRESHOLD, String(normalizeAutoFfThreshold(value)));
   }
 
+  function loadShowChatTimestamp(): Promise<boolean> {
+    return Promise.resolve().then(() => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_SHOW_CHAT_TIMESTAMP);
+        if (raw === null) return DEFAULT_SHOW_CHAT_TIMESTAMP;
+        return raw === 'true';
+      } catch {
+        return DEFAULT_SHOW_CHAT_TIMESTAMP;
+      }
+    });
+  }
+
+  function saveShowChatTimestamp(value: boolean): void {
+    try {
+      localStorage.setItem(STORAGE_KEY_SHOW_CHAT_TIMESTAMP, String(value));
+    } catch {
+      // ignore
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Favorites helpers
+  // ---------------------------------------------------------------------------
+
+  function normalizeFavoriteId(value: unknown): string {
+    return safeTrim(value).toLowerCase();
+  }
+
+  function normalizeFavoriteName(value: unknown): string | undefined {
+    const name = safeTrim(value);
+    return name ? name : undefined;
+  }
+
+  function normalizeFavorites(input: unknown): FavoriteChannel[] {
+    if (!Array.isArray(input)) return [];
+
+    const byId = new Map<string, FavoriteChannel>();
+
+    for (const raw of input) {
+      const item = raw as Partial<FavoriteChannel> | null;
+      const channelId = normalizeFavoriteId(item?.channelId);
+      const addedAt = Number(item?.addedAt);
+      if (!channelId || !Number.isFinite(addedAt)) continue;
+
+      const name = normalizeFavoriteName(item?.name);
+      const existing = byId.get(channelId);
+
+      if (!existing || addedAt < existing.addedAt) {
+        byId.set(channelId, {
+          channelId,
+          ...(name ? { name } : {}),
+          addedAt,
+        });
+        continue;
+      }
+
+      if (!existing.name && name) {
+        existing.name = name;
+      }
+    }
+
+    const list = Array.from(byId.values());
+    list.sort((a, b) => a.addedAt - b.addedAt);
+    return list;
+  }
+
+  function loadFavorites(): FavoriteChannel[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_FAVORITES);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return normalizeFavorites(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  function saveFavorites(list: FavoriteChannel[]): void {
+    try {
+      const normalized = normalizeFavorites(list);
+      localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(normalized));
+    } catch {
+      // ignore
+    }
+  }
+
+  function isFavorite(channelId: string): boolean {
+    const key = normalizeFavoriteId(channelId);
+    if (!key) return false;
+    return loadFavorites().some((fav) => normalizeFavoriteId(fav.channelId) === key);
+  }
+
+  function addFavorite(channel: FavoriteChannel): void {
+    const key = normalizeFavoriteId(channel.channelId);
+    if (!key) return;
+
+    const list = loadFavorites();
+    if (list.some((fav) => normalizeFavoriteId(fav.channelId) === key)) {
+      return;
+    }
+
+    const name = normalizeFavoriteName(channel.name);
+    list.push({
+      channelId: key,
+      ...(name ? { name } : {}),
+      addedAt: Number.isFinite(channel.addedAt) && channel.addedAt > 0 ? channel.addedAt : Date.now(),
+    });
+
+    saveFavorites(list);
+  }
+
+  function removeFavorite(channelId: string): void {
+    const key = normalizeFavoriteId(channelId);
+    if (!key) return;
+
+    const list = loadFavorites().filter((fav) => normalizeFavoriteId(fav.channelId) !== key);
+    saveFavorites(list);
+  }
+
+  function formatFavoriteLabel(channelId: string, name?: string): string {
+    const display = normalizeFavoriteName(name);
+    if (display) return display;
+    if (channelId.length <= 8) return channelId;
+    return `${channelId.slice(0, 8)}…`;
+  }
+
   // ---------------------------------------------------------------------------
   // Input helpers
   // ---------------------------------------------------------------------------
@@ -429,9 +661,12 @@
     const headerToggle = $('headerDefaultToggle') as HTMLInputElement | null;
     const chatPositionRight = $('chatPositionRight') as HTMLInputElement | null;
     const chatPositionLeft = $('chatPositionLeft') as HTMLInputElement | null;
+    const chatTimestampToggle = $('showChatTimestampToggle') as HTMLInputElement | null;
     const autoFfToggle = $('autoFfToggle') as HTMLInputElement | null;
     const autoFfThreshold = $('autoFfThreshold') as HTMLInputElement | null;
     const autoFfPresets = Array.from(document.querySelectorAll('.auto-ff-preset')) as HTMLButtonElement[];
+    const favoritesSection = $('favoritesSection') as HTMLElement | null;
+    const favoritesToggle = $('favoritesToggle') as HTMLButtonElement | null;
     const optionsSection = $('optionsSection') as HTMLElement | null;
     const optionsToggle = $('optionsToggle') as HTMLButtonElement | null;
 
@@ -459,6 +694,14 @@
 
       chatPositionRight?.addEventListener('change', onChatPositionChange);
       chatPositionLeft?.addEventListener('change', onChatPositionChange);
+    }
+    if (chatTimestampToggle) {
+      void loadShowChatTimestamp().then((value) => {
+        chatTimestampToggle.checked = value;
+      });
+      chatTimestampToggle.addEventListener('change', () => {
+        saveShowChatTimestamp(!!chatTimestampToggle.checked);
+      });
     }
     if (autoFfThreshold) {
       autoFfThreshold.value = String(loadAutoFfThreshold());
@@ -495,6 +738,18 @@
         });
       });
     }
+    if (favoritesSection && favoritesToggle) {
+      const syncFavoritesToggle = () => {
+        const collapsed = favoritesSection.classList.contains('is-collapsed');
+        favoritesToggle.setAttribute('aria-expanded', String(!collapsed));
+      };
+
+      syncFavoritesToggle();
+      favoritesToggle.addEventListener('click', () => {
+        favoritesSection.classList.toggle('is-collapsed');
+        syncFavoritesToggle();
+      });
+    }
     if (optionsSection && optionsToggle) {
       const syncOptionsToggle = () => {
         const collapsed = optionsSection.classList.contains('is-collapsed');
@@ -508,6 +763,7 @@
       });
     }
     updateFromInputValue(input.value);
+    renderFavoritesList();
 
     input.addEventListener('input', () => {
       saveNow();
@@ -540,6 +796,7 @@
       });
 
       const base = resolveBaseUrl(tab?.url);
+      const showChatTimestamp = chatTimestampToggle ? chatTimestampToggle.checked : await loadShowChatTimestamp();
       const settings: OpenSettings = {
         chatPosition:
           chatPositionLeft || chatPositionRight
@@ -554,6 +811,7 @@
           : loadHeaderDefault(),
         autoFfEnabled: autoFfToggle ? autoFfToggle.checked : loadAutoFfEnabled() === AUTO_FF_ENABLED,
         autoFfThreshold: normalizeAutoFfThreshold(autoFfThreshold?.value ?? loadAutoFfThreshold()),
+        showChatTimestamp,
       };
       chrome.tabs.create({ url: buildUrl(ids, base, settings) });
     });

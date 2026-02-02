@@ -51,6 +51,9 @@ declare global {
     // injectedMain.ts (player wide-mode hook)
     __CMV_PLAYER_WIDE_HOOKED__?: boolean;
 
+    // injectedChatWsHook.ts
+    __CMV_CHAT_WS_HOOKED__?: boolean;
+
     // CHZZK internal (best-effort; may be absent)
     __getLiveInfo?: () => { latency?: number } | undefined;
   }

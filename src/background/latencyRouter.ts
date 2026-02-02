@@ -127,6 +127,43 @@ const safeSend = (fn: () => void): void => {
     // -------------------------------------------------------------------------
     // (2) Inject main-world script
     // -------------------------------------------------------------------------
+    if (m.type === MSG.CHZZK_CHAT_INJECT) {
+      // Only inject into chat frames
+      if (!isChatFrame(sender)) {
+        sendResponse?.({ ok: false, error: 'NOT_CHAT_FRAME' });
+        return;
+      }
+
+      const tabId = sender?.tab?.id;
+      const frameId = sender?.frameId;
+      if (tabId == null || frameId == null) {
+        sendResponse?.({ ok: false, error: 'NO_SENDER' });
+        return;
+      }
+
+      if (!chrome.scripting?.executeScript) {
+        sendResponse?.({ ok: false, error: 'NO_SCRIPTING' });
+        return;
+      }
+
+      chrome.scripting
+        .executeScript({
+          target: { tabId, frameIds: [frameId] },
+          world: 'MAIN',
+          files: ['background/injectedChatWsHook.js'],
+        })
+        .then(() => sendResponse?.({ ok: true }))
+        .catch((err) => {
+          console.error('[latencyRouter] failed to inject chat ws hook', err);
+          sendResponse?.({
+            ok: false,
+            error: String(err?.message ?? err),
+          });
+        });
+
+      return true;
+    }
+
     if (m.type === MSG.CHZZK_LATENCY_INJECT) {
       // Never inject into chat frames
       if (isChatFrame(sender)) {
