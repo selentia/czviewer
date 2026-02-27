@@ -100,6 +100,7 @@
   let listObserver: MutationObserver | null = null;
   let currentWrapper: Element | null = null;
   let currentIsLive = true;
+  let attachRafId: number | null = null;
 
   const attachIfChanged = (wrapper: Element, isLive: boolean): void => {
     if (currentWrapper === wrapper && currentIsLive === isLive) return;
@@ -110,6 +111,8 @@
   };
 
   const tryAttach = (): void => {
+    if (listObserver && currentWrapper && currentWrapper.isConnected) return;
+
     if (!isTimestampEnabled()) return;
 
     const liveWrapper = document.querySelector(LIVE_LIST_WRAPPER);
@@ -124,15 +127,38 @@
     }
   };
 
+  const scheduleAttach = (): void => {
+    if (attachRafId != null) return;
+    attachRafId = window.requestAnimationFrame(() => {
+      attachRafId = null;
+      tryAttach();
+    });
+  };
+
   const rootObserver = new MutationObserver(() => {
-    tryAttach();
+    scheduleAttach();
   });
 
   rootObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => tryAttach(), { once: true });
+    document.addEventListener('DOMContentLoaded', () => scheduleAttach(), { once: true });
   } else {
-    tryAttach();
+    scheduleAttach();
   }
+
+  window.addEventListener(
+    'pagehide',
+    () => {
+      rootObserver.disconnect();
+      listObserver?.disconnect();
+      listObserver = null;
+      currentWrapper = null;
+      if (attachRafId != null) {
+        window.cancelAnimationFrame(attachRafId);
+        attachRafId = null;
+      }
+    },
+    { once: true }
+  );
 })();

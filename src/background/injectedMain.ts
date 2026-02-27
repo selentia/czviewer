@@ -186,18 +186,32 @@
   const root = document.getElementById('root');
   if (!root) return;
 
-  const waiting: Array<{ query: string; resolve: (n: Element) => void }> = [];
+  type Waiter = {
+    query: string;
+    timeoutId: number;
+    resolve: (n: Element | null) => void;
+  };
+
+  const waiting = new Set<Waiter>();
+
+  const findMatch = (node: Node, query: string): Element | null => {
+    if (!(node instanceof Element)) return null;
+    if (node.matches(query)) return node;
+    return node.querySelector(query);
+  };
 
   const rootObserver = new MutationObserver((mutations) => {
-    if (!waiting.length) return;
+    if (waiting.size === 0) return;
 
     for (const mutation of mutations) {
-      for (const n of mutation.addedNodes as any) {
-        if (n?.querySelector == null) continue;
-
-        for (const w of waiting) {
-          const node = n.querySelector(w.query);
-          if (node != null) w.resolve(node);
+      for (const n of mutation.addedNodes) {
+        for (const w of Array.from(waiting)) {
+          const node = findMatch(n, w.query);
+          if (node != null) {
+            clearTimeout(w.timeoutId);
+            waiting.delete(w);
+            w.resolve(node);
+          }
         }
       }
     }
@@ -209,10 +223,20 @@
     const node = root.querySelector(query);
     if (node) return Promise.resolve(node);
 
-    return Promise.race([
-      new Promise<Element>((resolve) => waiting.push({ query, resolve })),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), WAIT_TIMEOUT_MS)),
-    ]);
+    return new Promise<Element | null>((resolve) => {
+      const waiter = {
+        query,
+        timeoutId: 0,
+        resolve,
+      } as Waiter;
+
+      waiter.timeoutId = window.setTimeout(() => {
+        waiting.delete(waiter);
+        resolve(null);
+      }, WAIT_TIMEOUT_MS);
+
+      waiting.add(waiter);
+    });
   };
 
   rootObserver.observe(root, { childList: true, subtree: true });
@@ -341,5 +365,7 @@
       await attachBodyObserver();
     }
     rootObserver.disconnect();
+    waiting.forEach((w) => clearTimeout(w.timeoutId));
+    waiting.clear();
   })();
 })();
