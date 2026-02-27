@@ -19,7 +19,7 @@
       <textarea
         id="input"
         rows="10"
-        placeholder="예)
+        placeholder="예:
 https://chzzk.naver.com/live/0123456789abcdef0123456789abcdef
 https://chzzk.naver.com/0123456789abcdef0123456789abcdef
 0123456789abcdef0123456789abcdef"
@@ -27,11 +27,12 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
 
       <div class="meta">
         <div class="count" id="count">인식된 채널: 0</div>
-        <div class="hint-note">중복 입력은 자동으로 제거돼요.</div>
+        <div class="hint-note">※ 중복 입력은 자동으로 제거돼요.</div>
         <div class="errors" id="errors" aria-live="polite"></div>
       </div>
 
       <div class="chips" id="chips" aria-label="채널 미리보기"></div>
+      <div class="hint-note chips-help">※ 드래그로 순서를 변경할 수 있어요.</div>
 
       <div class="actions">
         <button id="open" class="btn primary">멀티뷰 열기</button>
@@ -44,10 +45,10 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
       <section class="options is-collapsed" id="favoritesSection">
         <button id="favoritesToggle" class="options-toggle" type="button" aria-expanded="false">
           <span class="options-toggle-icon" aria-hidden="true">&#x25B6;</span>
-          <span class="options-toggle-text">&#xC990;&#xACA8;&#xCC3E;&#xAE30;</span>
+          <span class="options-toggle-text">즐겨찾기</span>
         </button>
         <div class="settings">
-          <div id="favoritesEmpty" class="setting-note">&#xC990;&#xACA8;&#xCC3E;&#xAE30; &#xC5C6;&#xC74C;</div>
+          <div id="favoritesEmpty" class="setting-note">즐겨찾기 없음</div>
           <div id="favoritesList" class="favorites-list" role="list"></div>
           <div id="favoritesNotice" class="errors favorites-notice"></div>
         </div>
@@ -61,7 +62,7 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
         <div class="settings">
           <div class="settings-group">
             <div class="setting-row">
-              <label class="setting-label" for="headerDefaultToggle">상단 바 숨기기 (전체)</label>
+              <label class="setting-label" for="headerDefaultToggle">상단 바 숨기기(전체)</label>
               <input id="headerDefaultToggle" type="checkbox" />
             </div>
             <div class="setting-row">
@@ -104,8 +105,14 @@ https://chzzk.naver.com/0123456789abcdef0123456789abcdef
                 </div>
               </div>
             </div>
+            <div class="setting-box">
+              <div class="setting-row setting-row-plain">
+                <label class="setting-label" for="autoRewardClaimToggle">통나무 자동 획득</label>
+                <input id="autoRewardClaimToggle" type="checkbox" />
+              </div>
+            </div>
           </div>
-          <div class="setting-note">설정은 새로 연 멀티뷰부터 적용됩니다.</div>
+          <div class="setting-note">※ 설정은 새로 연 멀티뷰부터 적용됩니다.</div>
         </div>
       </section>
       <div class="footer-links">

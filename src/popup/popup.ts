@@ -41,6 +41,7 @@
   const DEV_BASE_URL = 'http://localhost:8787';
   const STORAGE_KEY_HEADER_DEFAULT = 'cmv-header-default';
   const STORAGE_KEY_CHAT_POSITION = 'cmv-chat-position';
+  const STORAGE_KEY_AUTO_REWARD_CLAIM = 'cmv-auto-reward-claim';
   const STORAGE_KEY_AUTO_FF = 'cmv-auto-ff';
   const STORAGE_KEY_AUTO_FF_THRESHOLD = 'cmv-auto-ff-threshold';
   const STORAGE_KEY_SHOW_CHAT_TIMESTAMP = 'czmv:showChatTimestamp';
@@ -49,6 +50,8 @@
   const HEADER_DEFAULT_OFF = 'off';
   const CHAT_POSITION_RIGHT = 'right';
   const CHAT_POSITION_LEFT = 'left';
+  const AUTO_REWARD_CLAIM_ENABLED = '1';
+  const AUTO_REWARD_CLAIM_DISABLED = '0';
   const AUTO_FF_ENABLED = '1';
   const AUTO_FF_DISABLED = '0';
   const AUTO_FF_THRESHOLD_DEFAULT = 12;
@@ -88,6 +91,8 @@
 
   let recognizedChannels: ChannelItem[] = [];
   let lastInvalid: string[] = [];
+  let draggingChannelId: string | null = null;
+  let dropTarget: { id: string; placeAfter: boolean } | null = null;
 
   /**
    * Parse raw textarea input into:
@@ -174,12 +179,63 @@
     saveNow();
   }
 
-  function swapRecognized(index: number, direction: -1 | 1): void {
-    const target = index + direction;
-    if (target < 0 || target >= recognizedChannels.length) return;
-    [recognizedChannels[index], recognizedChannels[target]] = [recognizedChannels[target], recognizedChannels[index]];
+  function moveRecognizedNear(fromId: string, targetId: string, placeAfter: boolean): void {
+    if (!fromId || !targetId || fromId === targetId) return;
+
+    const fromIndex = recognizedChannels.findIndex((item) => item.id === fromId);
+    const targetIndex = recognizedChannels.findIndex((item) => item.id === targetId);
+    if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return;
+
+    const [moved] = recognizedChannels.splice(fromIndex, 1);
+    const baseIndex = recognizedChannels.findIndex((item) => item.id === targetId);
+    if (baseIndex < 0) return;
+
+    const insertIndex = placeAfter ? baseIndex + 1 : baseIndex;
+    recognizedChannels.splice(insertIndex, 0, moved);
+
     syncInputFromRecognized();
-    renderPreview();
+  }
+
+  function moveRecognizedToEnd(fromId: string): void {
+    if (!fromId || recognizedChannels.length < 2) return;
+    const lastId = recognizedChannels[recognizedChannels.length - 1]?.id;
+    if (!lastId) return;
+    moveRecognizedNear(fromId, lastId, true);
+  }
+
+  function clearDropIndicator(container: HTMLElement): void {
+    container.querySelectorAll<HTMLElement>('.chip.is-drop-before, .chip.is-drop-after').forEach((el) => {
+      el.classList.remove('is-drop-before', 'is-drop-after');
+    });
+  }
+
+  function setDropIndicator(container: HTMLElement, target: { id: string; placeAfter: boolean } | null): void {
+    clearDropIndicator(container);
+    if (!target) return;
+
+    const chipEls = container.querySelectorAll<HTMLElement>('.chip');
+    for (const chipEl of chipEls) {
+      if (chipEl.dataset.channelId !== target.id) continue;
+      chipEl.classList.add(target.placeAfter ? 'is-drop-after' : 'is-drop-before');
+      break;
+    }
+  }
+
+  function resolveDropTarget(container: HTMLElement, clientY: number): { id: string; placeAfter: boolean } | null {
+    const chipEls = container.querySelectorAll<HTMLElement>('.chip');
+
+    for (const chipEl of chipEls) {
+      const targetId = chipEl.dataset.channelId;
+      if (!targetId || targetId === draggingChannelId) continue;
+
+      const rect = chipEl.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+
+      if (clientY < mid) return { id: targetId, placeAfter: false };
+      if (clientY <= rect.bottom) return { id: targetId, placeAfter: true };
+    }
+
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -245,39 +301,48 @@
       ? `${countPrefix}: ${recognizedChannels.length}`
       : String(recognizedChannels.length);
     chips.textContent = '';
+    chips.ondragover = (e) => {
+      if (!draggingChannelId) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      dropTarget = resolveDropTarget(chips, e.clientY);
+      setDropIndicator(chips, dropTarget);
+    };
+    chips.ondrop = (e) => {
+      if (!draggingChannelId) return;
+      e.preventDefault();
+      const fromId = draggingChannelId;
+      draggingChannelId = null;
+      const target = dropTarget;
+      dropTarget = null;
+      clearDropIndicator(chips);
+      if (target) {
+        moveRecognizedNear(fromId, target.id, target.placeAfter);
+      } else {
+        moveRecognizedToEnd(fromId);
+      }
+      renderPreview();
+    };
+    chips.ondragleave = (e) => {
+      const nextTarget = e.relatedTarget;
+      if (nextTarget instanceof Node && chips.contains(nextTarget)) return;
+      dropTarget = null;
+      clearDropIndicator(chips);
+    };
 
     // Render channel chips
-    const total = recognizedChannels.length;
-    recognizedChannels.forEach((item, index) => {
+    recognizedChannels.forEach((item) => {
       const id = item.id;
       const chip = document.createElement('div');
       chip.className = 'chip';
+      chip.draggable = true;
+      chip.dataset.channelId = id;
+      chip.setAttribute('aria-label', '드래그로 순서 변경');
 
       const label = document.createElement('span');
       label.className = 'chip-label';
       label.textContent = item.label || id;
       label.title = item.label && item.label !== id ? `${item.label} (${id})` : id;
-
-      const short = document.createElement('code');
-      short.textContent = id.slice(0, 6);
-
-      const moveUpBtn = document.createElement('button');
-      moveUpBtn.type = 'button';
-      moveUpBtn.className = 'chip-move chip-move-up';
-      moveUpBtn.textContent = '↑';
-      moveUpBtn.title = '위로 이동';
-      moveUpBtn.setAttribute('aria-label', 'Move up');
-      moveUpBtn.disabled = index === 0;
-      moveUpBtn.addEventListener('click', () => swapRecognized(index, -1));
-
-      const moveDownBtn = document.createElement('button');
-      moveDownBtn.type = 'button';
-      moveDownBtn.className = 'chip-move chip-move-down';
-      moveDownBtn.textContent = '↓';
-      moveDownBtn.title = '아래로 이동';
-      moveDownBtn.setAttribute('aria-label', 'Move down');
-      moveDownBtn.disabled = index === total - 1;
-      moveDownBtn.addEventListener('click', () => swapRecognized(index, 1));
 
       const favoriteBtn = document.createElement('button');
       favoriteBtn.type = 'button';
@@ -316,19 +381,34 @@
       removeBtn.className = 'chip-remove';
       removeBtn.title = '이 채널 제거';
       removeBtn.textContent = '×';
+      removeBtn.draggable = false;
       removeBtn.addEventListener('click', () => {
         removeChannelFromInput(id);
       });
 
       const actions = document.createElement('div');
       actions.className = 'chip-actions';
-      actions.appendChild(moveUpBtn);
-      actions.appendChild(moveDownBtn);
       actions.appendChild(favoriteBtn);
       actions.appendChild(removeBtn);
 
+      chip.addEventListener('dragstart', (e) => {
+        draggingChannelId = id;
+        dropTarget = null;
+        chip.classList.add('is-dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', id);
+        }
+      });
+
+      chip.addEventListener('dragend', () => {
+        draggingChannelId = null;
+        dropTarget = null;
+        chip.classList.remove('is-dragging');
+        clearDropIndicator(chips);
+      });
+
       chip.appendChild(label);
-      chip.appendChild(short);
       chip.appendChild(actions);
       chips.appendChild(chip);
 
@@ -421,6 +501,7 @@
   type OpenSettings = {
     chatPosition: 'right' | 'left';
     headerDefault: 'on' | 'off';
+    autoRewardClaimEnabled: boolean;
     autoFfEnabled: boolean;
     autoFfThreshold: number;
     showChatTimestamp: boolean;
@@ -431,6 +512,7 @@
     for (const id of ids) params.append('c', id);
     params.set('chat', settings.chatPosition);
     params.set('header', settings.headerDefault);
+    params.set('lp', settings.autoRewardClaimEnabled ? '1' : '0');
     params.set('autoFF', settings.autoFfEnabled ? '1' : '0');
     params.set('autoFFThreshold', String(settings.autoFfThreshold));
     if (settings.showChatTimestamp) params.set('ts', '1');
@@ -475,6 +557,15 @@
 
   function saveChatPosition(value: 'right' | 'left'): void {
     localStorage.setItem(STORAGE_KEY_CHAT_POSITION, value);
+  }
+
+  function loadAutoRewardClaimEnabled(): '0' | '1' {
+    const saved = localStorage.getItem(STORAGE_KEY_AUTO_REWARD_CLAIM);
+    return saved === AUTO_REWARD_CLAIM_ENABLED ? AUTO_REWARD_CLAIM_ENABLED : AUTO_REWARD_CLAIM_DISABLED;
+  }
+
+  function saveAutoRewardClaimEnabled(value: '0' | '1'): void {
+    localStorage.setItem(STORAGE_KEY_AUTO_REWARD_CLAIM, value);
   }
 
   function normalizeAutoFfThreshold(value: unknown): number {
@@ -567,20 +658,32 @@
     return list;
   }
 
+  let favoritesCache: FavoriteChannel[] | null = null;
+  let favoriteIdSetCache: Set<string> | null = null;
+
+  function setFavoritesCache(list: unknown): FavoriteChannel[] {
+    const normalized = normalizeFavorites(list);
+    favoritesCache = normalized;
+    favoriteIdSetCache = new Set(normalized.map((fav) => normalizeFavoriteId(fav.channelId)));
+    return normalized;
+  }
+
   function loadFavorites(): FavoriteChannel[] {
+    if (favoritesCache) return favoritesCache;
+
     try {
       const raw = localStorage.getItem(STORAGE_KEY_FAVORITES);
-      if (!raw) return [];
+      if (!raw) return setFavoritesCache([]);
       const parsed = JSON.parse(raw);
-      return normalizeFavorites(parsed);
+      return setFavoritesCache(parsed);
     } catch {
-      return [];
+      return setFavoritesCache([]);
     }
   }
 
   function saveFavorites(list: FavoriteChannel[]): void {
+    const normalized = setFavoritesCache(list);
     try {
-      const normalized = normalizeFavorites(list);
       localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(normalized));
     } catch {
       // ignore
@@ -590,7 +693,10 @@
   function isFavorite(channelId: string): boolean {
     const key = normalizeFavoriteId(channelId);
     if (!key) return false;
-    return loadFavorites().some((fav) => normalizeFavoriteId(fav.channelId) === key);
+    if (!favoriteIdSetCache) {
+      void loadFavorites();
+    }
+    return !!favoriteIdSetCache?.has(key);
   }
 
   function addFavorite(channel: FavoriteChannel): void {
@@ -662,6 +768,7 @@
     const chatPositionRight = $('chatPositionRight') as HTMLInputElement | null;
     const chatPositionLeft = $('chatPositionLeft') as HTMLInputElement | null;
     const chatTimestampToggle = $('showChatTimestampToggle') as HTMLInputElement | null;
+    const rewardClaimToggle = $('autoRewardClaimToggle') as HTMLInputElement | null;
     const autoFfToggle = $('autoFfToggle') as HTMLInputElement | null;
     const autoFfThreshold = $('autoFfThreshold') as HTMLInputElement | null;
     const autoFfPresets = Array.from(document.querySelectorAll('.auto-ff-preset')) as HTMLButtonElement[];
@@ -701,6 +808,13 @@
       });
       chatTimestampToggle.addEventListener('change', () => {
         saveShowChatTimestamp(!!chatTimestampToggle.checked);
+      });
+    }
+    if (rewardClaimToggle) {
+      rewardClaimToggle.checked = loadAutoRewardClaimEnabled() === AUTO_REWARD_CLAIM_ENABLED;
+      rewardClaimToggle.addEventListener('change', () => {
+        const next = rewardClaimToggle.checked ? AUTO_REWARD_CLAIM_ENABLED : AUTO_REWARD_CLAIM_DISABLED;
+        saveAutoRewardClaimEnabled(next);
       });
     }
     if (autoFfThreshold) {
@@ -809,6 +923,9 @@
             ? HEADER_DEFAULT_OFF
             : HEADER_DEFAULT_ON
           : loadHeaderDefault(),
+        autoRewardClaimEnabled: rewardClaimToggle
+          ? rewardClaimToggle.checked
+          : loadAutoRewardClaimEnabled() === AUTO_REWARD_CLAIM_ENABLED,
         autoFfEnabled: autoFfToggle ? autoFfToggle.checked : loadAutoFfEnabled() === AUTO_FF_ENABLED,
         autoFfThreshold: normalizeAutoFfThreshold(autoFfThreshold?.value ?? loadAutoFfThreshold()),
         showChatTimestamp,

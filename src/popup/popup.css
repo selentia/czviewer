@@ -109,37 +109,59 @@ textarea:focus {
  * Chips
  * ============================== */
 .chips {
-  display: grid;
-  gap: 6px;
-  max-height: 140px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 220px;
   overflow: auto;
   padding: 2px;
-  justify-items: start;
+  align-content: flex-start;
 }
 
 .chip {
-  display: inline-flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 6px;
-  padding: 6px 8px;
+  flex: 1 0 100%;
+  width: 100%;
+  max-width: 100%;
+  padding: 7px 8px;
   border-radius: 8px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.06);
+  cursor: grab;
+}
+
+.chips-help {
+  margin-top: -2px;
+}
+
+.chip:active {
+  cursor: grabbing;
+}
+
+.chip.is-dragging {
+  opacity: 0.6;
+}
+
+.chip.is-drop-before {
+  box-shadow: inset 0 2px 0 rgba(120, 160, 255, 0.85);
+}
+
+.chip.is-drop-after {
+  box-shadow: inset 0 -2px 0 rgba(120, 160, 255, 0.85);
 }
 
 .chip-label {
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chip code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.75);
+  min-width: 0;
+  max-width: 22ch;
+  display: block;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .chip-remove {
@@ -147,9 +169,12 @@ textarea:focus {
   background: transparent;
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  padding: 0 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
   font-size: 12px;
   line-height: 1;
+  border-radius: 5px;
 }
 
 .chip-remove:hover {
@@ -159,7 +184,10 @@ textarea:focus {
 .chip-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 6px;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .chip-fav {
@@ -167,10 +195,12 @@ textarea:focus {
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  padding: 0 6px;
-  font-size: 12px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 11px;
   line-height: 1.2;
-  border-radius: 6px;
+  border-radius: 5px;
 }
 
 .chip-fav:hover {
@@ -182,27 +212,6 @@ textarea:focus {
   color: #ff7abf;
   border-color: rgba(255, 122, 191, 0.6);
   background: rgba(255, 122, 191, 0.12);
-}
-
-.chip-move {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  padding: 0 4px;
-  font-size: 10px;
-  line-height: 1.2;
-  border-radius: 6px;
-}
-
-.chip-move:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.95);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.chip-move:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 
 /* ==============================
@@ -291,7 +300,7 @@ textarea:focus {
 /* Settings */
 .settings {
   display: grid;
-  gap: 16px;
+  gap: 8px;
   font-size: 13px;
 }
 
@@ -303,7 +312,7 @@ textarea:focus {
 .setting-box {
   display: grid;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.035);
@@ -320,9 +329,9 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  min-height: 44px;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 42px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.035);
@@ -359,14 +368,15 @@ textarea:focus {
 
 .threshold-input {
   width: 72px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.045);
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
   color: #eaeef7;
-  font-size: 12px;
-  outline: none;
+  padding: 0 8px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .threshold-input:focus {
@@ -455,7 +465,8 @@ textarea:focus {
 }
 
 .favorites-list {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -471,8 +482,10 @@ textarea:focus {
 .favorite-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
+  width: fit-content;
+  max-width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -480,13 +493,19 @@ textarea:focus {
 }
 
 .favorite-add {
-  flex: 1;
+  flex: 0 1 auto;
   border: 0;
   background: transparent;
   color: #eaeef7;
   text-align: left;
   font-size: 12px;
   cursor: pointer;
+  min-width: 0;
+  max-width: 24ch;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .favorite-add:hover {
