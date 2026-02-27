@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CZ MultiViewer",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "여러 치지직(CHZZK) 방송을 한 화면에서 동시에 시청할 수 있는 멀티뷰 도구",
 
   "icons": {
