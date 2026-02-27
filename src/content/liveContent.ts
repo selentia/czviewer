@@ -40,6 +40,7 @@
   const extracted = extractChannelId(window.location.href);
   if (!extracted) return;
   const channelId = extracted;
+  const autoRewardClaimEnabled = new URLSearchParams(window.location.search).get('cmv_lp') === '1';
 
   // ---------------------------------------------------------------------------
   // Shared utilities
@@ -56,31 +57,90 @@
   // (A) FF (Fast-Forward / buffer pull)
   // ===========================================================================
 
-  chrome.runtime.onMessage.addListener((msg: any) => {
-    if (!msg || msg.type !== MSG.CHZZK_FF_APPLY) return;
-    if (String(msg.channelId ?? '') !== channelId) return;
+  type RewardRunResponse = {
+    ok: boolean;
+    claimed: boolean;
+    channelId: string;
+    claimCount?: number;
+    skipped?: string;
+    error?: string;
+  };
 
-    const marginRaw = Number(msg.marginSec);
-    const marginSec = Number.isFinite(marginRaw) ? marginRaw : 0.6;
+  let runRewardClaimOnce: (() => Promise<{ claimed: boolean; claimCount: number }>) | null = null;
+  let rewardClaimInFlight: Promise<{ claimed: boolean; claimCount: number }> | null = null;
 
-    const video = getVideoElement();
-    if (!video) return;
+  chrome.runtime.onMessage.addListener((msg: any, _sender, sendResponse) => {
+    if (!msg || typeof msg !== 'object') return;
 
-    try {
-      const buf = video.buffered;
-      if (!buf || buf.length === 0) return;
+    if (msg.type === MSG.CHZZK_FF_APPLY) {
+      if (String(msg.channelId ?? '') !== channelId) return;
 
-      const i = buf.length - 1;
-      const end = buf.end(i);
-      const start = buf.start(i);
+      const marginRaw = Number(msg.marginSec);
+      const marginSec = Number.isFinite(marginRaw) ? marginRaw : 0.6;
 
-      const target = end - marginSec;
-      if (target > video.currentTime && target > start) {
-        video.currentTime = target;
+      const video = getVideoElement();
+      if (!video) return;
+
+      try {
+        const buf = video.buffered;
+        if (!buf || buf.length === 0) return;
+
+        const i = buf.length - 1;
+        const end = buf.end(i);
+        const start = buf.start(i);
+
+        const target = end - marginSec;
+        if (target > video.currentTime && target > start) {
+          video.currentTime = target;
+        }
+      } catch {
+        // ignore playback edge errors
       }
-    } catch {
-      // ignore playback edge errors
+      return;
     }
+
+    if (msg.type !== MSG.CHZZK_REWARD_RUN) return;
+
+    if (!autoRewardClaimEnabled || !runRewardClaimOnce) {
+      sendResponse?.({
+        ok: true,
+        claimed: false,
+        channelId,
+        skipped: 'DISABLED',
+      } satisfies RewardRunResponse);
+      return;
+    }
+
+    const targetChannelId = String(msg.channelId ?? '').trim();
+    if (targetChannelId && targetChannelId !== channelId) {
+      sendResponse?.({
+        ok: false,
+        claimed: false,
+        channelId,
+        error: 'CHANNEL_MISMATCH',
+      } satisfies RewardRunResponse);
+      return;
+    }
+
+    void runRewardClaimOnce()
+      .then((result) =>
+        sendResponse?.({
+          ok: true,
+          claimed: !!result.claimed,
+          channelId,
+          claimCount: Number(result.claimCount || 0),
+        } satisfies RewardRunResponse)
+      )
+      .catch((err) =>
+        sendResponse?.({
+          ok: false,
+          claimed: false,
+          channelId,
+          error: String(err?.message ?? err),
+        } satisfies RewardRunResponse)
+      );
+
+    return true;
   });
 
   // ===========================================================================
@@ -126,7 +186,130 @@
   });
 
   // ===========================================================================
-  // (C) Periodic latency / buffer reporting
+  // (C) Reward auto-claim (WATCH_1_HOUR)
+  // ===========================================================================
+
+  const TARGET_REWARD_TYPE = 'WATCH_1_HOUR';
+  const REWARD_HEARTBEAT_MS = 15_000;
+  const REWARD_FETCH_TIMEOUT_MS = 10_000;
+
+  const sendRewardPresence = (
+    type: typeof MSG.CHZZK_REWARD_REGISTER | typeof MSG.CHZZK_REWARD_HEARTBEAT | typeof MSG.CHZZK_REWARD_UNREGISTER
+  ): void => {
+    if (!autoRewardClaimEnabled) return;
+
+    try {
+      chrome.runtime.sendMessage(
+        {
+          type,
+          channelId,
+        },
+        () => {
+          void chrome.runtime.lastError;
+        }
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const fetchWithTimeout = async (input: string, init: RequestInit): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), REWARD_FETCH_TIMEOUT_MS);
+
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  };
+
+  const fetchClaimableRewardIds = async (): Promise<string[]> => {
+    const url = `https://api.chzzk.naver.com/service/v1/channels/${encodeURIComponent(channelId)}/log-power`;
+
+    try {
+      const res = await fetchWithTimeout(url, {
+        credentials: 'include',
+      });
+      if (!res.ok) return [];
+
+      const data = await res.json();
+      const claims = Array.isArray(data?.content?.claims) ? data.content.claims : [];
+
+      return claims
+        .filter((claim: any) => String(claim?.claimType || '').toUpperCase() === TARGET_REWARD_TYPE && !!claim?.claimId)
+        .map((claim: any) => String(claim.claimId));
+    } catch {
+      return [];
+    }
+  };
+
+  const submitRewardClaims = async (claimIds: string[]): Promise<boolean> => {
+    if (!claimIds.length) return false;
+    let claimed = false;
+
+    for (const claimId of claimIds) {
+      const putUrl = `https://api.chzzk.naver.com/service/v1/channels/${encodeURIComponent(
+        channelId
+      )}/log-power/claims/${encodeURIComponent(claimId)}`;
+
+      try {
+        const res = await fetchWithTimeout(putUrl, {
+          method: 'PUT',
+          credentials: 'include',
+        });
+        if (res.ok) claimed = true;
+      } catch {
+        // ignore individual claim failures
+      }
+    }
+
+    return claimed;
+  };
+
+  const executeRewardClaimOnce = async (): Promise<{
+    claimed: boolean;
+    claimCount: number;
+  }> => {
+    const claimIds = await fetchClaimableRewardIds();
+    if (!claimIds.length) {
+      return { claimed: false, claimCount: 0 };
+    }
+
+    const claimed = await submitRewardClaims(claimIds);
+    return { claimed, claimCount: claimIds.length };
+  };
+
+  runRewardClaimOnce = async () => {
+    if (rewardClaimInFlight) {
+      return rewardClaimInFlight;
+    }
+
+    rewardClaimInFlight = executeRewardClaimOnce().finally(() => {
+      rewardClaimInFlight = null;
+    });
+
+    return rewardClaimInFlight;
+  };
+
+  if (autoRewardClaimEnabled) {
+    sendRewardPresence(MSG.CHZZK_REWARD_REGISTER);
+    const rewardHeartbeatIntervalId = window.setInterval(
+      () => sendRewardPresence(MSG.CHZZK_REWARD_HEARTBEAT),
+      REWARD_HEARTBEAT_MS
+    );
+
+    window.addEventListener('pagehide', () => {
+      sendRewardPresence(MSG.CHZZK_REWARD_UNREGISTER);
+      window.clearInterval(rewardHeartbeatIntervalId);
+    });
+  }
+
+  // ===========================================================================
+  // (D) Periodic latency / buffer reporting
   // ===========================================================================
 
   let warnedNoLatency = false;

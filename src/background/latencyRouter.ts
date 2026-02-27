@@ -23,6 +23,18 @@ import { MSG } from '../shared/messages';
 
 type AnyObj = Record<string, any>;
 
+type RewardParticipant = {
+  tabId: number;
+  frameId: number;
+  channelId: string;
+  updatedAt: number;
+};
+
+type RewardRunResponse = {
+  ok?: boolean;
+  claimed?: boolean;
+};
+
 // -----------------------------------------------------------------------------
 // Utilities
 // -----------------------------------------------------------------------------
@@ -51,6 +63,224 @@ const safeSend = (fn: () => void): void => {
     /* ignore */
   }
 };
+
+const REWARD_HEARTBEAT_STALE_MS = 45_000;
+const REWARD_SCHEDULE_INTERVAL_MS = 15_000;
+const REWARD_COOLDOWN_MS = 55 * 60 * 1000;
+const REWARD_RUN_RESPONSE_TIMEOUT_MS = 12_000;
+const REWARD_IDB_NAME = 'cmv-reward';
+const REWARD_IDB_STORE = 'kv';
+const REWARD_COOLDOWN_KEY = 'cooldownUntil';
+
+const rewardParticipants = new Map<string, RewardParticipant>();
+let rewardRoundRobinCursor = 0;
+let rewardCooldownUntil = 0;
+let rewardTickInFlight = false;
+let rewardCooldownReady = false;
+let rewardSchedulerIntervalId: number | null = null;
+
+let rewardDbPromise: Promise<IDBDatabase | null> | null = null;
+
+const getRewardParticipantKey = (tabId: number, frameId: number): string => `${tabId}:${frameId}`;
+
+const openRewardDb = (): Promise<IDBDatabase | null> => {
+  if (rewardDbPromise) return rewardDbPromise;
+
+  rewardDbPromise = new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(REWARD_IDB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(REWARD_IDB_STORE)) {
+          db.createObjectStore(REWARD_IDB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+
+  return rewardDbPromise;
+};
+
+const withRewardStore = async <T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => Promise<T>
+): Promise<T | null> => {
+  const db = await openRewardDb();
+  if (!db) return null;
+
+  try {
+    const tx = db.transaction(REWARD_IDB_STORE, mode);
+    const store = tx.objectStore(REWARD_IDB_STORE);
+    return await run(store);
+  } catch {
+    return null;
+  }
+};
+
+const readRewardCooldownUntil = async (): Promise<number> => {
+  const raw = await withRewardStore(
+    'readonly',
+    (store) =>
+      new Promise<number>((resolve) => {
+        try {
+          const req = store.get(REWARD_COOLDOWN_KEY);
+          req.onsuccess = () => {
+            const n = Number(req.result);
+            resolve(Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+          };
+          req.onerror = () => resolve(0);
+        } catch {
+          resolve(0);
+        }
+      })
+  );
+
+  return raw ?? 0;
+};
+
+const writeRewardCooldownUntil = async (until: number): Promise<void> => {
+  await withRewardStore(
+    'readwrite',
+    (store) =>
+      new Promise<void>((resolve) => {
+        try {
+          const req = store.put(until, REWARD_COOLDOWN_KEY);
+          req.onsuccess = () => resolve();
+          req.onerror = () => resolve();
+        } catch {
+          resolve();
+        }
+      })
+  );
+};
+
+const ensureRewardSchedulerRunning = (): void => {
+  if (rewardSchedulerIntervalId != null) return;
+  rewardSchedulerIntervalId = self.setInterval(runRewardSchedulerTick, REWARD_SCHEDULE_INTERVAL_MS);
+};
+
+const stopRewardSchedulerIfIdle = (): void => {
+  if (rewardParticipants.size > 0) return;
+  if (rewardSchedulerIntervalId == null) return;
+  clearInterval(rewardSchedulerIntervalId);
+  rewardSchedulerIntervalId = null;
+};
+
+const upsertRewardParticipant = (tabId: number, frameId: number, channelId: string): void => {
+  const key = getRewardParticipantKey(tabId, frameId);
+  rewardParticipants.set(key, {
+    tabId,
+    frameId,
+    channelId,
+    updatedAt: Date.now(),
+  });
+  ensureRewardSchedulerRunning();
+};
+
+const removeRewardParticipant = (tabId: number, frameId: number): void => {
+  rewardParticipants.delete(getRewardParticipantKey(tabId, frameId));
+  stopRewardSchedulerIfIdle();
+};
+
+const pruneRewardParticipants = (now: number): void => {
+  rewardParticipants.forEach((participant, key) => {
+    if (now - participant.updatedAt > REWARD_HEARTBEAT_STALE_MS) {
+      rewardParticipants.delete(key);
+    }
+  });
+  stopRewardSchedulerIfIdle();
+};
+
+const getRewardNextTarget = (now: number): RewardParticipant | null => {
+  pruneRewardParticipants(now);
+  const list = Array.from(rewardParticipants.values());
+  if (!list.length) return null;
+
+  if (rewardRoundRobinCursor >= list.length) {
+    rewardRoundRobinCursor = 0;
+  }
+
+  const target = list[rewardRoundRobinCursor] ?? null;
+  rewardRoundRobinCursor = (rewardRoundRobinCursor + 1) % list.length;
+  return target;
+};
+
+const runRewardSchedulerTick = (): void => {
+  if (rewardTickInFlight) return;
+  if (!rewardCooldownReady) return;
+
+  const now = Date.now();
+  if (rewardCooldownUntil > now) return;
+
+  const target = getRewardNextTarget(now);
+  if (!target) return;
+
+  rewardTickInFlight = true;
+  let sendStarted = false;
+  let settled = false;
+
+  const settleTick = (): boolean => {
+    if (settled) return false;
+    settled = true;
+    rewardTickInFlight = false;
+    return true;
+  };
+
+  const tickTimeoutId = setTimeout(() => {
+    settleTick();
+  }, REWARD_RUN_RESPONSE_TIMEOUT_MS);
+
+  safeSend(() => {
+    sendStarted = true;
+    chrome.tabs.sendMessage(
+      target.tabId,
+      { type: MSG.CHZZK_REWARD_RUN, channelId: target.channelId },
+      { frameId: target.frameId },
+      (rawResponse: RewardRunResponse | undefined) => {
+        clearTimeout(tickTimeoutId);
+        settleTick();
+
+        if (chrome.runtime.lastError) {
+          const errMsg = String(chrome.runtime.lastError.message || '');
+          if (errMsg.includes('Receiving end does not exist') || errMsg.includes('No tab with id')) {
+            removeRewardParticipant(target.tabId, target.frameId);
+          }
+          return;
+        }
+
+        const response = rawResponse || {};
+        if (response.ok && response.claimed) {
+          rewardCooldownUntil = Date.now() + REWARD_COOLDOWN_MS;
+          void writeRewardCooldownUntil(rewardCooldownUntil);
+        }
+      }
+    );
+  });
+
+  if (!sendStarted) {
+    clearTimeout(tickTimeoutId);
+    settleTick();
+  }
+};
+
+const initRewardCooldown = async (): Promise<void> => {
+  const stored = await readRewardCooldownUntil();
+  const now = Date.now();
+  rewardCooldownUntil = stored > now ? stored : 0;
+  rewardCooldownReady = true;
+
+  if (stored !== rewardCooldownUntil) {
+    void writeRewardCooldownUntil(rewardCooldownUntil);
+  }
+
+  runRewardSchedulerTick();
+};
+
+void initRewardCooldown();
 
 // -----------------------------------------------------------------------------
 // Message router
@@ -122,6 +352,50 @@ const safeSend = (fn: () => void): void => {
 
       sendResponse?.({ ok: true });
       return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // (1-3) Reward participant registration
+    // -------------------------------------------------------------------------
+    if (m.type === MSG.CHZZK_REWARD_REGISTER || m.type === MSG.CHZZK_REWARD_HEARTBEAT) {
+      if (isChatFrame(sender)) {
+        sendResponse?.({ ok: false, error: 'CHAT_FRAME' });
+        return;
+      }
+
+      const tabId = sender?.tab?.id;
+      const frameId = sender?.frameId;
+      const channelId = String(m.channelId ?? '').trim();
+      if (tabId == null || frameId == null) {
+        sendResponse?.({ ok: false, error: 'NO_SENDER' });
+        return;
+      }
+      if (!channelId) {
+        sendResponse?.({ ok: false, error: 'EMPTY_CHANNEL_ID' });
+        return;
+      }
+
+      const isRegister = m.type === MSG.CHZZK_REWARD_REGISTER;
+      upsertRewardParticipant(tabId, frameId, channelId);
+      if (isRegister) {
+        runRewardSchedulerTick();
+      }
+      sendResponse?.({ ok: true });
+      return;
+    }
+
+    if (m.type === MSG.CHZZK_REWARD_UNREGISTER) {
+      const tabId = sender?.tab?.id;
+      const frameId = sender?.frameId;
+      if (tabId == null || frameId == null) {
+        sendResponse?.({ ok: false, error: 'NO_SENDER' });
+        return;
+      }
+
+      removeRewardParticipant(tabId, frameId);
+      runRewardSchedulerTick();
+      sendResponse?.({ ok: true });
+      return;
     }
 
     // -------------------------------------------------------------------------
@@ -240,3 +514,11 @@ const safeSend = (fn: () => void): void => {
     console.warn('[latencyRouter] unknown message type', m?.type, m);
   });
 })();
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  rewardParticipants.forEach((participant) => {
+    if (participant.tabId === tabId) {
+      removeRewardParticipant(participant.tabId, participant.frameId);
+    }
+  });
+});

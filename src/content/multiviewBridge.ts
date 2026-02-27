@@ -33,6 +33,7 @@ import { MSG, ExtensionToWebMessage, WebToExtensionMessage } from '../shared/mes
 
 const pageOrigin = window.location.origin;
 const EXT_READY_EVENT = 'CMV_EXT_READY';
+const rewardClaimEnabled = new URLSearchParams(window.location.search).get('lp') === '1';
 
 // channelId subscriptions for latency updates
 const subscribedLatency = new Set<string>();
@@ -45,6 +46,116 @@ let extMarked = false;
 // -----------------------------------------------------------------------------
 
 const isString = (v: unknown): v is string => typeof v === 'string';
+
+function normalizeRewardTargetSrc(rawSrc: string): string | null {
+  try {
+    const url = new URL(rawSrc, window.location.href);
+    const host = url.hostname.toLowerCase();
+    const isLiveHost = host === 'chzzk.naver.com' || host === 'm.chzzk.naver.com';
+    const isLivePath = /^\/live\/[^/]+\/?$/.test(url.pathname);
+
+    if (!isLiveHost || !isLivePath) return null;
+
+    url.searchParams.set('cmv_lp', rewardClaimEnabled ? '1' : '0');
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function patchIframeRewardParam(iframe: HTMLIFrameElement): void {
+  const rawAttr = iframe.getAttribute('src');
+  const source = rawAttr || iframe.src;
+  if (!source) return;
+
+  const next = normalizeRewardTargetSrc(source);
+  if (!next) return;
+
+  let currentAbs = '';
+  try {
+    currentAbs = new URL(source, window.location.href).toString();
+  } catch {
+    currentAbs = source;
+  }
+
+  if (currentAbs === next) return;
+  iframe.src = next;
+}
+
+function installRewardParamPatcher(): void {
+  type QueryRoot = Document | Element;
+  const pendingIframes = new Set<HTMLIFrameElement>();
+  const pendingRoots = new Set<QueryRoot>();
+  let rafId: number | null = null;
+
+  const flush = () => {
+    rafId = null;
+
+    pendingIframes.forEach((iframe) => patchIframeRewardParam(iframe));
+    pendingIframes.clear();
+
+    pendingRoots.forEach((root) => {
+      root.querySelectorAll('iframe').forEach((el) => patchIframeRewardParam(el as HTMLIFrameElement));
+    });
+    pendingRoots.clear();
+  };
+
+  const queueFlush = () => {
+    if (rafId != null) return;
+    rafId = window.requestAnimationFrame(flush);
+  };
+
+  const enqueueIframe = (iframe: HTMLIFrameElement) => {
+    pendingIframes.add(iframe);
+    queueFlush();
+  };
+
+  const enqueueRoot = (root: QueryRoot) => {
+    pendingRoots.add(root);
+    queueFlush();
+  };
+
+  enqueueRoot(document);
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes' && mutation.target instanceof HTMLIFrameElement) {
+        enqueueIframe(mutation.target);
+        continue;
+      }
+
+      if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
+
+      mutation.addedNodes.forEach((node) => {
+        if (node instanceof HTMLIFrameElement) {
+          enqueueIframe(node);
+          return;
+        }
+
+        if (node instanceof Element) {
+          enqueueRoot(node);
+        }
+      });
+    }
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['src'],
+  });
+
+  window.addEventListener('pagehide', () => {
+    observer.disconnect();
+    if (rafId != null) {
+      window.cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    pendingIframes.clear();
+    pendingRoots.clear();
+  });
+}
 
 function postToPage(message: ExtensionToWebMessage): void {
   window.postMessage(message, pageOrigin);
@@ -249,3 +360,4 @@ chrome.runtime?.onMessage?.addListener(handleRuntimeMessage);
 // Kick background helpers once bridge is active
 pingCookieBridgeOnce();
 markExtensionPresent();
+installRewardParamPatcher();
